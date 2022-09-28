@@ -6,8 +6,9 @@
  */
 const puppeteer = require('puppeteer');
 
-(async () => {
-  console.log('Generando reporte de la mejor playa para surfear MAÑANA...');
+// TODO: get tides
+const generateBeachReport = async (beach) => {
+  console.log(`Generando reporte de la playa ${beach.name}...`);
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
   await page.setViewport({
@@ -15,18 +16,21 @@ const puppeteer = require('puppeteer');
     height: 800,
     deviceScaleFactor: 1,
   });
-
-  // const playasData = playas.map( async(playa) => {})
-  await page.goto('https://magicseaweed.com/Biologia-Surf-Report/2704/');
+  page.setDefaultNavigationTimeout(9000000);
+  await page.goto(beach.url);
   const data = await page.evaluate(() => {
-    const getDataOfDayMoment = (dayMoment) => {
+    const getDataOfDayMoment = (dayMoment, name) => {
       try {
-        const meters = dayMoment.querySelector('.table-forecast-breaking-wave > span').textContent;
+        const meters = dayMoment.querySelector(
+          '.table-forecast-breaking-wave > span',
+        ).textContent;
         const activeStars = dayMoment.querySelectorAll('.active').length;
         const inactiveStars = dayMoment.querySelectorAll('.inactive').length;
         const [, , , averageMetersElement, periodElement] = dayMoment.querySelectorAll('td');
         const [, swellDirectionElement] = dayMoment.querySelectorAll('.msw-js-tooltip');
-        const [minWindElement, maxWindElement] = dayMoment.querySelectorAll('.table-forecast-wind > .stacked-text');
+        const [minWindElement, maxWindElement] = dayMoment.querySelectorAll(
+          '.table-forecast-wind > .stacked-text',
+        );
         const windDirectionElement = dayMoment.querySelector('.last');
         const averageMeters = averageMetersElement.querySelector('h4').textContent;
         const period = periodElement.querySelector('h4').textContent;
@@ -44,8 +48,11 @@ const puppeteer = require('puppeteer');
           status = 'danger';
         }
 
-        const swellDirection = swellDirectionElement.getAttribute('data-original-title');
+        const swellDirection = swellDirectionElement.getAttribute(
+          'data-original-title',
+        );
         return {
+          id: name,
           status,
           meters,
           activeStars,
@@ -57,7 +64,6 @@ const puppeteer = require('puppeteer');
             direction: windDirectionElement.getAttribute('data-original-title'),
             min: minWindElement.textContent,
             max: maxWindElement.textContent,
-
           },
         };
       } catch (error) {
@@ -65,17 +71,27 @@ const puppeteer = require('puppeteer');
         throw error;
       }
     };
-    const [, containerForeCast] = document.querySelectorAll('.table-forecast > tbody');
-    const [, , , dawn, midMorning, noon, afternoon, sunset] = containerForeCast.querySelectorAll('tr');
+    const buildResponse = (container) => {
+      const [, , , dawn, midMorning, noon, afternoon, sunset] = container.querySelectorAll('tr');
+      return [
+        getDataOfDayMoment(dawn, 'dawn'),
+        getDataOfDayMoment(midMorning, 'midMorning'),
+        getDataOfDayMoment(noon, 'noon'),
+        getDataOfDayMoment(afternoon, 'afternoon'),
+        getDataOfDayMoment(sunset, 'sunset'),
+      ];
+    };
+    const [todayForecast, tomorrowForecast] = document.querySelectorAll(
+      '.table-forecast > tbody',
+    );
     return {
-      dawn: getDataOfDayMoment(dawn),
-      midMorning: getDataOfDayMoment(midMorning),
-      noon: getDataOfDayMoment(noon),
-      afternoon: getDataOfDayMoment(afternoon),
-      sunset: getDataOfDayMoment(sunset),
+      today: buildResponse(todayForecast),
+      tomorrow: buildResponse(tomorrowForecast),
     };
   });
 
-  console.log(JSON.stringify(data));
   await browser.close();
-})();
+  return data;
+};
+
+module.exports = generateBeachReport;
